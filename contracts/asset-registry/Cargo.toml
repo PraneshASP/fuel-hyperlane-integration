@@ -1,0 +1,18 @@
+[package]
+name = "asset-registry"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dev-dependencies]
+fuels = "0.66.0"
+tokio = { version = "1.12", features = ["rt", "macros"] }
+fuel-asm = "0.60.0"
+fuel-tx = "0.60.0"
+anyhow = "1.0"
+hyperlane-core = { workspace = true }
+
+[[test]]
+harness = true
+name = "registry_tests"
+path = "tests/harness.rs"

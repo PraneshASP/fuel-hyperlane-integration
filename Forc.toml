@@ -8,8 +8,10 @@ members = [
   "contracts/libs/message",
   "contracts/libs/std-lib-extended",
   "contracts/libs/std-hook-metadata",
+  "contracts/libs/utils",
   "contracts/mocks/mock-post-dispatch",
   "contracts/mocks/mock-msg-recipient",
+  "contracts/mocks/mock-mailbox",
   "contracts/test/msg-recipient-test",
   "contracts/test/ism-test",
   "contracts/test/src20-test",
@@ -33,4 +35,6 @@ members = [
   "contracts/ism/libs/aggregation-ism-metadata",
   "contracts/libs/checkpoint",
   "contracts/gas-oracle",
+  "contracts/asset-registry",
+  "contracts/wrapped-asset-minter",
 ]

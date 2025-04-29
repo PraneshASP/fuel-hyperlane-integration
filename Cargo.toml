@@ -23,6 +23,8 @@ members = [
   "contracts/validator-announce",
   "contracts/mailbox",
   "contracts/warp-route",
+  "contracts/asset-registry",
+  "contracts/wrapped-asset-minter",
 ]
 
 

@@ -230,6 +230,9 @@ if [ "$ENVIRONMENT" == "LOCAL" ]; then
     LOCAL_FUEL_KEYS=("mailbox" "postDispatch" "testRecipient" "interIdSecurityModule" "merkleTreeHook" "interchainGasPaymaster" "validatorAnnounce" "gasOracle" "aggregationISM" "domainRoutingISM" "fallbackDomainRoutingISM" "messageIdMultisigISM1" "merkleRootMultisigISM1" "messageIdMultisigISM3" "merkleRootMultisigISM3" "warpRouteNative" "warpRouteSynthetic" "warpRouteCollateral" "collateralTokenContract" "testCollateralAsset" "aggregationHook" "pausableHook" "protocolFee")
     LOCAL_ANVIL_KEYS=("domainRoutingIsmFactory" "interchainAccountIsm" "interchainAccountRouter" "mailbox" "proxyAdmin" "staticAggregationHookFactory" "staticAggregationIsmFactory" "staticMerkleRootMultisigIsmFactory" "staticMessageIdMultisigIsmFactory" "testRecipient" "validatorAnnounce")
 
+    # mkdir "$PROJECT_ROOT/infra/output/contracts"
+    # mkdir "$PROJECT_ROOT/infra/output/contracts/local"
+    touch "$PROJECT_ROOT/infra/output/contracts/chains/test1/addresses.yaml"
     # Read fuel data
     declare -A FUEL_VALUES
     for key in "${LOCAL_FUEL_KEYS[@]}"; do

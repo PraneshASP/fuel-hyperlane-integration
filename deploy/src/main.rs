@@ -168,6 +168,22 @@ async fn deploy_mainnet_structure(
     .await;
     let required_hook = deploy_protocol_fee_hook(wallet_bits, &fuel_wallet).await;
 
+    // Deploy and initialize wrapped asset minter and asset registry
+    let minter_id = deploy_wrapped_asset_minter(&fuel_wallet, ContractId::zeroed()).await;
+    let asset_registry_id = deploy_asset_registry(&fuel_wallet, ContractId::from(minter_id.clone())).await;
+    
+    // Update minter with actual asset registry address
+    let minter = WrappedAssetMinter::new(minter_id.clone(), fuel_wallet.clone());
+    minter
+        .methods()
+        .initialize(
+            Identity::Address(fuel_wallet.address().into()),
+            Bits256(*ContractId::from(asset_registry_id.clone())),
+        )
+        .call()
+        .await
+        .unwrap();
+
     let recipient_id = deploy_recipient(&fuel_wallet).await;
     let validator_announce_id =
         deploy_validator_announce(env.origin_domain, mailbox_contract_id.clone(), &fuel_wallet)
@@ -319,6 +335,25 @@ async fn main() {
     //////////////////////////////////
 
     let protocol_fee_hook_id = deploy_protocol_fee_hook(wallet_bits, &fuel_wallet).await;
+
+    ///////////////////////////////////
+    // Asset Registry and Minter Deployment //
+    ///////////////////////////////////
+
+    let minter_id = deploy_wrapped_asset_minter(&fuel_wallet, ContractId::zeroed()).await;
+    let asset_registry_id = deploy_asset_registry(&fuel_wallet, ContractId::from(minter_id.clone())).await;
+    
+    // Update minter with actual asset registry address
+    let minter = WrappedAssetMinter::new(minter_id.clone(), fuel_wallet.clone());
+    // minter
+    //     .methods()
+    //     .initialize(
+    //         Identity::Address(fuel_wallet.address().into()),
+    //         Bits256(*ContractId::from(asset_registry_id.clone())),
+    //     )
+    //     .call()
+    //     .await
+    //     .unwrap();
 
     /////////////////////////////////////////
     // Gas Paymaster Components Deployment //
@@ -675,6 +710,25 @@ async fn main() {
             .await;
 
     /////////////////////////////////////
+    // Asset Registry Initialization //
+    /////////////////////////////////////
+
+    let minter_id = deploy_wrapped_asset_minter(&fuel_wallet, ContractId::zeroed()).await;
+    let asset_registry_id = deploy_asset_registry(&fuel_wallet, ContractId::from(minter_id.clone())).await;
+    
+    // Update minter with actual asset registry address
+    let minter = WrappedAssetMinter::new(minter_id.clone(), fuel_wallet.clone());
+    // minter
+    //     .methods()
+    //     .initialize(
+    //         Identity::Address(fuel_wallet.address().into()),
+    //         Bits256(*ContractId::from(asset_registry_id.clone())),
+    //     )
+    //     .call()
+    //     .await
+    //     .unwrap();
+
+    /////////////////////////////////////
     // Merkle Tree Hook Initialization //
     /////////////////////////////////////
 
@@ -825,6 +879,8 @@ async fn main() {
         aggregation_hook_id.into(),
         pausable_hook_id.into(),
         protocol_fee_hook_id.into(),
+        asset_registry_id.into(),
+        minter_id.into()
     )
     .dump(&env.dump_path);
 }

@@ -76,5 +76,13 @@ abigen!(
     Contract(
         name = "FallbackDomainRoutingHook",
         abi = "contracts/hooks/fallback-domain-routing-hook/out/debug/fallback-domain-routing-hook-abi.json",
+    ),
+    Contract(
+        name = "AssetRegistry",
+        abi = "contracts/asset-registry/out/debug/asset-registry-abi.json",
+    ),
+    Contract(
+        name = "WrappedAssetMinter",
+        abi = "contracts/wrapped-asset-minter/out/debug/wrapped-asset-minter-abi.json",
     )
 );

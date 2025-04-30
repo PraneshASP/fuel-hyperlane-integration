@@ -1263,9 +1263,9 @@ async fn test_mint_with_real_mailbox() {
         .methods()
         .process(metadata, message_bytes)
         // .with_tx_policies(TxPolicies::default())
-        // .determine_missing_contracts(Some(3))
-        // .await.unwrap()
         .with_variable_output_policy(VariableOutputPolicy::EstimateMinimum)
+        .determine_missing_contracts(None)
+        .await.unwrap()
         // .tx_params(tx_params)
         .with_contracts(&[&registry, &test_ism, &minter]) // &minter, &test_ism, &mailbox
         // .with_contract_ids(&[registry.contract_id().clone()]) // minter.clone().contract_id().clone(), mailbox_id.clone()

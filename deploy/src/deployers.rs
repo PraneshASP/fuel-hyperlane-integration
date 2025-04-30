@@ -39,6 +39,41 @@ pub async fn deploy_mailbox(
     mailbox_contract_id
 }
 
+pub async fn deploy_asset_registry(
+    wallet: &WalletUnlocked,
+    minter_id: ContractId,
+) -> Bech32ContractId {
+    let binary_filepath = "../contracts/asset-registry/out/debug/asset-registry.bin";
+    let asset_registry_id = Contract::load_from(
+        binary_filepath,
+        get_deployment_config(),
+    )
+    .unwrap()
+    .deploy(wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let asset_registry = AssetRegistry::new(asset_registry_id.clone(), wallet.clone());
+    
+    // Initialize asset registry with minter contract
+    asset_registry
+        .methods()
+        .initialize(
+            Identity::Address(wallet.address().into()),
+            Bech32ContractId::from(minter_id),
+        )
+        .call()
+        .await
+        .unwrap();
+
+    println!(
+        "assetRegistry: 0x{}",
+        ContractId::from(asset_registry_id.clone())
+    );
+
+    asset_registry_id
+}
+
 pub async fn deploy_aggregation_ism(
     wallet_bits: Bits256,
     wallet: &WalletUnlocked,
@@ -342,6 +377,41 @@ pub async fn deploy_fallback_domain_routing_hook(
     );
 
     fallback_domain_routing_hook_id
+}
+
+pub async fn deploy_wrapped_asset_minter(
+    wallet: &WalletUnlocked,
+    asset_registry_id: ContractId,
+) -> Bech32ContractId {
+    let binary_filepath = "../contracts/wrapped-asset-minter/out/debug/wrapped-asset-minter.bin";
+    let minter_id = Contract::load_from(
+        binary_filepath,
+        get_deployment_config(),
+    )
+    .unwrap()
+    .deploy(wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let minter = WrappedAssetMinter::new(minter_id.clone(), wallet.clone());
+    
+    // Initialize minter with asset registry
+    minter
+        .methods()
+        .initialize(
+            Identity::Address(wallet.address().into()),
+            Bits256(*asset_registry_id),
+        )
+        .call()
+        .await
+        .unwrap();
+
+    println!(
+        "wrappedAssetMinter: 0x{}",
+        ContractId::from(minter_id.clone())
+    );
+
+    minter_id
 }
 
 pub async fn deploy_gas_oracle(wallet_bits: Bits256, wallet: &WalletUnlocked) -> Bech32ContractId {

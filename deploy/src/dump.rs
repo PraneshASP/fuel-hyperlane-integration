@@ -55,6 +55,10 @@ pub struct ContractAddresses {
     pausable_hook: String,
     #[serde(rename = "protocolFee")]
     protocol_fee: String,
+    #[serde(rename = "assetRegistry")]
+    asset_registry: String,
+    #[serde(rename = "wrappedAssetMinter")]
+    wrapped_asset_minter: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -83,6 +87,8 @@ impl ContractAddresses {
         aggregation_hook: ContractId,
         pausable_hook: ContractId,
         protocol_fee: ContractId,
+        asset_registry: ContractId,
+        wrapped_asset_minter: ContractId,
     ) -> Self {
         Self {
             mailbox: format!("0x{}", mailbox),
@@ -108,6 +114,8 @@ impl ContractAddresses {
             aggregation_hook: format!("0x{}", aggregation_hook),
             pausable_hook: format!("0x{}", pausable_hook),
             protocol_fee: format!("0x{}", protocol_fee),
+            asset_registry: format!("0x{}", asset_registry),
+            wrapped_asset_minter: format!("0x{}", wrapped_asset_minter),
         }
     }
 

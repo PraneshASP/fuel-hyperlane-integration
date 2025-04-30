@@ -11,6 +11,9 @@ mod remote_mailbox;
 mod set_gas_configs;
 mod synthetic_asset_recieve;
 mod synthetic_asset_send;
+mod wrapped_asset_mint_test;
+mod wrapped_assets_full_flow;
+//mod wrapped_assets_send;
 
 use std::{future::Future, pin::Pin};
 
@@ -72,5 +75,8 @@ pub fn pull_test_cases() -> Vec<TestCase> {
         collateral_asset_recieve::test(),
         native_asset_recieve::test(),
         hooks_setup::test(),
+        // wrapped_asset_mint_test::test(),
+       wrapped_assets_full_flow::test(),
+       // wrapped_assets_send::test(),
     ]
 }

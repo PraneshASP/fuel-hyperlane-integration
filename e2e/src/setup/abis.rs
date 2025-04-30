@@ -65,4 +65,12 @@ abigen!(
         name = "PausableHook",
         abi = "contracts/hooks/pausable-hook/out/debug/pausable-hook-abi.json",
     ),
+    Contract(
+        name = "AssetRegistry",
+        abi = "contracts/asset-registry/out/debug/asset-registry-abi.json",
+    ),
+    Contract(
+        name = "WrappedAssetMinter",
+        abi = "contracts/wrapped-asset-minter/out/debug/wrapped-asset-minter-abi.json",
+    ),
 );

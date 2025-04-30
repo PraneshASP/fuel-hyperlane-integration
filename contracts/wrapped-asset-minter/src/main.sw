@@ -157,6 +157,9 @@ abi WrappedAssetMinter {
     #[storage(read, write)]
     fn set_registry(registry: b256);
 
+    #[storage(read)]
+    fn registry() -> b256;
+
     #[storage(read, write)]
     fn mint_redemption_tickets(recipient: Identity, sub_id: SubId, amount: u64);
 }
@@ -254,6 +257,17 @@ impl WrappedAssetMinter for Contract {
     #[storage(read, write)]
     fn set_registry(registry: b256) {
         storage.registry.write(Some(registry));
+    }
+
+     #[storage(read)]
+    fn registry() -> b256 {
+        let registry_id = match storage.registry.read() {
+            Some(id) => id,
+            None => {
+                b256::from(0x0000000000000000000000000000000000000000000000000000000000000000)
+            },
+        };
+        return registry_id;
     }
 
     #[storage(read, write)]

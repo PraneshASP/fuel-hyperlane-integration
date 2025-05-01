@@ -75,8 +75,10 @@ pub fn pull_test_cases() -> Vec<TestCase> {
         collateral_asset_recieve::test(),
         native_asset_recieve::test(),
         hooks_setup::test(),
-        // wrapped_asset_mint_test::test(),
-       wrapped_assets_full_flow::test(),
-       // wrapped_assets_send::test(),
+        wrapped_asset_mint_test::test(),
+        wrapped_assets_full_flow::test(),
     ]
 }
+
+
+ 

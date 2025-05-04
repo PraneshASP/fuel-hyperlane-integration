@@ -47,6 +47,7 @@ storage {
     domains: StorageVec<u32> = StorageVec {},
     /// Mapping of remote router decimals
     remote_router_decimals: StorageMap<b256, u8> = StorageMap {},
+    mailbox_contract_id: Option<ContractId> = Option::None,
 }
 
 enum RegistryEvent {
@@ -56,6 +57,7 @@ enum RegistryEvent {
     BridgeDeauthorizedForAsset: (b256, b256),
     OwnerUpdated: Identity,
     MinterContractUpdated: ContractId,
+    MailboxContractUpdated: ContractId,
 }
 
 enum TokenRouterError {
@@ -63,17 +65,13 @@ enum TokenRouterError {
     RouterLengthMismatch: (),
 }
 
-
 abi TokenRouter {
- 
     #[storage(read)]
     fn router(domain: u32) -> b256;
 
- 
     #[storage(read)]
     fn all_routers() -> Vec<b256>;
 
- 
     #[storage(read)]
     fn all_domains() -> Vec<u32>;
 
@@ -81,15 +79,12 @@ abi TokenRouter {
     #[storage(read, write)]
     fn unenroll_remote_router(domain: u32) -> bool;
 
- 
     #[storage(read, write)]
     fn enroll_remote_router(domain: u32, router: b256);
 
- 
     #[storage(read, write)]
     fn enroll_remote_routers(domains: Vec<u32>, routers: Vec<b256>);
 
- 
     #[storage(read)]
     fn remote_router_decimals(router: b256) -> u8;
 
@@ -136,6 +131,9 @@ abi UniversalWrappedAssetsRegistry {
     #[storage(read, write)]
     fn update_minter_contract(new_minter_contract: ContractId);
 
+    #[storage(read, write)]
+    fn update_mailbox(new_mailbox: ContractId);
+
     // bridge_contract should be the address that calls the `handle()` method
     // For ex: hyperlane mailbox
     #[storage(read, write)]
@@ -179,6 +177,9 @@ abi UniversalWrappedAssetsRegistry {
 
     #[storage(read)]
     fn get_minter() -> ContractId;
+
+    #[storage(read)]
+    fn get_mailbox() -> ContractId;
 
     #[storage(read)]
     fn minter_mint(
@@ -251,6 +252,15 @@ impl UniversalWrappedAssetsRegistry for Contract {
             .write(Option::Some(new_minter_contract));
 
         log(RegistryEvent::MinterContractUpdated(new_minter_contract));
+    }
+
+    #[storage(read, write)]
+    fn update_mailbox(new_mailbox: ContractId) {
+        let _ = require_authorized(storage.owner.read());
+
+        storage.mailbox_contract_id.write(Option::Some(new_mailbox));
+
+        log(RegistryEvent::MailboxContractUpdated(new_mailbox));
     }
 
     #[storage(read, write)]
@@ -463,6 +473,18 @@ impl UniversalWrappedAssetsRegistry for Contract {
     }
 
     #[storage(read)]
+    fn get_mailbox() -> ContractId {
+        let mailbox_id = match storage.mailbox_contract_id.read() {
+            Some(id) => id,
+            None => {
+                ContractId::from(0x0000000000000000000000000000000000000000000000000000000000000000)
+            },
+        };
+
+        mailbox_id
+    }
+
+    #[storage(read)]
     fn minter_mint(
         origin: u32,
         sender: b256,
@@ -521,7 +543,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
             redemption_balance >= amount,
             "Insufficient redemption balance",
         );
-        
+
         let minter_id = storage.minter_contract_id.read().unwrap();
         let asset_id = AssetId::new(minter_id, sub_id);
         require(msg_asset_id() == asset_id, "Wrong asset sent");
@@ -539,7 +561,11 @@ impl UniversalWrappedAssetsRegistry for Contract {
             .insert(balance_key, redemption_balance - amount);
 
         let minter = abi(WrappedAssetMinter, b256::from(minter_id));
-        minter.burn{coins: amount, asset_id:asset_id.into()}(sub_id, amount);
+        minter
+            .burn {
+                coins: amount,
+                asset_id: asset_id.into(),
+            }(sub_id, amount);
 
         let redemption_ticket_id = match storage.subid_to_redemption_ticket.get(sub_id).try_read() {
             Some(id) => id,
@@ -549,17 +575,27 @@ impl UniversalWrappedAssetsRegistry for Contract {
             }
         };
         let redemption_asset_id = AssetId::new(minter_id, redemption_ticket_id);
-        minter.burn{coins: amount, asset_id: redemption_asset_id.into()}(redemption_ticket_id, amount);
+        minter
+            .burn {
+                coins: amount,
+                asset_id: redemption_asset_id.into(),
+            }(redemption_ticket_id, amount);
 
         // TODO: Build message body for the bridge
-        // let message_body = _build_message_body(recipient, amount);
+        let message_body = _build_message_body(recipient, amount);
 
-        // // Dispatch message to external chain via bridge (mailbox)
-        // let mailbox = abi(Mailbox, b256::from(ContractId::this()));
-        // let message_id = mailbox.dispatch(destination_domain, recipient, message_body);
+        let mailbox_id = match storage.mailbox_contract_id.read() {
+            Some(id) => id,
+            None => {
+                require(false, "Mailbox not set");
+                ContractId::from(0x0000000000000000000000000000000000000000000000000000000000000000)
+            },
+        };
+        let mailbox = abi(Mailbox, b256::from(mailbox_id));
+        let message_id = mailbox.dispatch(destination_domain, recipient, message_body);
 
-        //message_id
-        ZERO_B256
+        message_id
+        // ZERO_B256
     }
 
     #[storage(read)]
@@ -594,17 +630,18 @@ impl TokenRouter for Contract {
         let count = storage.domains.len();
         let mut i = 0;
         let mut routers = Vec::new();
-        
+
         while i < count {
             if let Some(domain_entry) = storage.domains.get(i) {
                 let domain = domain_entry.read();
-                if let Some(router) = storage.routers.get(domain).try_read() {
+                if let Some(router) = storage.routers.get(domain).try_read()
+                {
                     routers.push(router);
                 }
             }
             i += 1;
         }
-        
+
         routers
     }
 
@@ -613,28 +650,28 @@ impl TokenRouter for Contract {
         let count = storage.domains.len();
         let mut i = 0;
         let mut result = Vec::new();
-        
+
         while i < count {
             if let Some(domain_entry) = storage.domains.get(i) {
                 result.push(domain_entry.read());
             }
             i += 1;
         }
-        
+
         result
     }
 
     #[storage(read, write)]
     fn unenroll_remote_router(domain: u32) -> bool {
         let _ = require_authorized(storage.owner.read());
-        
+
         let removed = storage.routers.remove(domain);
-        
+
         if removed {
             // Find and remove the domain from domains vec
             let count = storage.domains.len();
             let mut i = 0;
-            
+
             while i < count {
                 if let Some(domain_entry) = storage.domains.get(i) {
                     if domain_entry.read() == domain {
@@ -645,7 +682,7 @@ impl TokenRouter for Contract {
                 i += 1;
             }
         }
-        
+
         false
     }
 
@@ -658,15 +695,17 @@ impl TokenRouter for Contract {
     #[storage(read, write)]
     fn enroll_remote_routers(domains: Vec<u32>, routers: Vec<b256>) {
         let _ = require_authorized(storage.owner.read());
-        
+
         require(
-            domains.len() == routers.len(),
+            domains
+                .len() == routers
+                .len(),
             TokenRouterError::RouterLengthMismatch,
         );
 
         let mut i = 0;
         let length = domains.len();
-        
+
         while i < length {
             let domain = domains.get(i).unwrap();
             let router = routers.get(i).unwrap();
@@ -686,7 +725,6 @@ impl TokenRouter for Contract {
         storage.remote_router_decimals.insert(router, decimals);
     }
 }
-
 
 impl MessageRecipient for Contract {
     #[storage(read)]
@@ -741,7 +779,7 @@ impl MessageRecipient for Contract {
         log(amount);
     }
 
-     #[storage(read)]
+    #[storage(read)]
     fn interchain_security_module() -> ContractId {
         ContractId::from(b256::zero())
     }
@@ -761,7 +799,7 @@ fn _build_message_body(recipient: b256, amount: u64) -> Bytes {
     let mut buffer = Buffer::new();
 
     buffer = recipient.abi_encode(buffer);
-    let amount_u256 = u256::from(amount); 
+    let amount_u256 = u256::from(amount);
     buffer = amount_u256.abi_encode(buffer);
     let bytes = Bytes::from(buffer.as_raw_slice());
     bytes
@@ -776,12 +814,12 @@ fn _get_router(domain: u32) -> b256 {
 #[storage(read, write)]
 fn _insert_route_to_state(domain: u32, router: b256) {
     storage.routers.insert(domain, router);
-    
+
     // Only add domain to the list if it's not already there
     let count = storage.domains.len();
     let mut i = 0;
     let mut exists = false;
-    
+
     while i < count {
         if let Some(domain_entry) = storage.domains.get(i) {
             if domain_entry.read() == domain {
@@ -791,7 +829,7 @@ fn _insert_route_to_state(domain: u32, router: b256) {
         }
         i += 1;
     }
-    
+
     if !exists {
         storage.domains.push(domain);
     }
@@ -801,4 +839,3 @@ fn _insert_route_to_state(domain: u32, router: b256) {
 fn _get_remote_router_decimals(router: b256) -> u8 {
     storage.remote_router_decimals.get(router).try_read().unwrap_or(0)
 }
-

@@ -28,6 +28,10 @@ abigen!(
     Contract(
         name = "TestInterchainSecurityModule",
         abi = "contracts/test/ism-test/out/debug/ism-test-abi.json"
+    ),
+    Contract(
+        name = "PostDispatchMock",
+        abi = "contracts/mocks/mock-post-dispatch/out/debug/mock-post-dispatch-abi.json",
     )
 );
 
@@ -1265,7 +1269,8 @@ async fn test_mint_with_real_mailbox() {
         // .with_tx_policies(TxPolicies::default())
         .with_variable_output_policy(VariableOutputPolicy::EstimateMinimum)
         .determine_missing_contracts(None)
-        .await.unwrap()
+        .await
+        .unwrap()
         // .tx_params(tx_params)
         .with_contracts(&[&registry, &test_ism, &minter]) // &minter, &test_ism, &mailbox
         // .with_contract_ids(&[registry.contract_id().clone()]) // minter.clone().contract_id().clone(), mailbox_id.clone()
@@ -1314,4 +1319,274 @@ async fn test_mint_with_real_mailbox() {
         .value;
 
     assert_eq!(total_supply.unwrap(), mint_amount,);
+}
+
+#[tokio::test]
+async fn test_withdraw_with_real_mailbox() {
+    let (registry, _, registry_id, _, provider, admin_wallet) = get_contract_instances().await;
+    let wallets = get_wallets();
+    let mut user_wallet = wallets[10].clone();
+    user_wallet.set_provider(provider.clone());
+
+    let minter_id = Contract::load_from(
+        "../wrapped-asset-minter/out/debug/wrapped-asset-minter.bin",
+        LoadConfiguration::default(),
+    )
+    .unwrap()
+    .deploy(&admin_wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let minter = WrappedAssetMinter::new(&minter_id, admin_wallet.clone());
+
+    registry
+        .methods()
+        .update_minter_contract(minter_id.clone())
+        .call()
+        .await
+        .unwrap();
+
+    minter
+        .methods()
+        .initialize(
+            to_fuel_identity(&admin_wallet),
+            Bits256::from(AssetId::new(*registry_id)),
+        )
+        .call()
+        .await
+        .unwrap();
+
+    let mailbox_id = Contract::load_from(
+        "../mailbox/out/debug/mailbox.bin",
+        LoadConfiguration::default(),
+    )
+    .unwrap()
+    .deploy(&admin_wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let mailbox = Mailbox::new(&mailbox_id, admin_wallet.clone());
+    registry
+        .methods()
+        .update_mailbox(mailbox_id.clone())
+        .call()
+        .await
+        .unwrap();
+    let ism_id = Contract::load_from(
+        "../test/ism-test/out/debug/ism-test.bin",
+        LoadConfiguration::default(),
+    )
+    .unwrap()
+    .deploy(&admin_wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let test_ism = TestInterchainSecurityModule::new(&ism_id, admin_wallet.clone());
+    test_ism.methods().set_accept(true).call().await.unwrap();
+
+    let hook_id = Contract::load_from(
+        "../mocks/mock-post-dispatch/out/debug/mock-post-dispatch.bin",
+        LoadConfiguration::default(),
+    )
+    .unwrap()
+    .deploy(&admin_wallet, TxPolicies::default())
+    .await
+    .unwrap();
+
+    let hook = PostDispatchMock::new(&hook_id, admin_wallet.clone());
+
+    let owner_identity = Identity::Address(admin_wallet.address().into());
+    mailbox
+        .methods()
+        .initialize(
+            owner_identity,
+            Bits256(ContractId::from(ism_id.clone()).into()),
+            Bits256(ContractId::from(hook_id.clone()).into()),
+            Bits256(ContractId::from(hook_id.clone()).into()),
+        )
+        .call()
+        .await
+        .unwrap();
+
+    let bridge_name = "HyperlaneBridge".to_string();
+    let bridge_address = Identity::ContractId(mailbox_id.clone().into());
+    let bridge_id = registry
+        .methods()
+        .register_bridge(bridge_name, bridge_address)
+        .call()
+        .await
+        .unwrap()
+        .value;
+
+    let origin_chain_id = 1u64;
+    let token_address = Bits256::from(AssetId::from([20u8; 32]));
+    let decimals = 18;
+    let name = "Test Withdrawal Token".to_string();
+    let symbol = "TWT".to_string();
+
+    let asset_sub_id = registry
+        .methods()
+        .register_asset(origin_chain_id, token_address, decimals, name, symbol)
+        .call()
+        .await
+        .unwrap()
+        .value;
+
+    registry
+        .methods()
+        .authorize_bridge_for_asset(bridge_id, asset_sub_id)
+        .call()
+        .await
+        .unwrap();
+
+    let redemption_ticket_id = registry
+        .methods()
+        .get_redemption_ticket_for_sub_id(asset_sub_id)
+        .call()
+        .await
+        .unwrap()
+        .value
+        .unwrap();
+
+    let destination_domain = origin_chain_id as u32;
+    let destination_router = token_address;
+
+    registry
+        .methods()
+        .enroll_remote_router(destination_domain, destination_router)
+        .call()
+        .await
+        .unwrap();
+
+    let recipient_address = Bits256(admin_wallet.address().hash().into());
+    let mint_amount = 1_000_000u64;
+
+    let mut body = Vec::new();
+    body.extend_from_slice(&recipient_address.0);
+
+    let amount_bytes = mint_amount.to_be_bytes();
+    let mut padded_amount = vec![0u8; 32 - amount_bytes.len()];
+    padded_amount.extend_from_slice(&amount_bytes);
+    body.extend_from_slice(&padded_amount);
+
+    let registry_recipient = H256::from_slice(registry.contract_id().hash().as_slice());
+    let message = HyperlaneAgentMessage {
+        version: 3u8,
+        nonce: 0u32,
+        origin: origin_chain_id as u32,
+        sender: H256::from_slice(&token_address.0),
+        destination: 0x6675656cu32,
+        recipient: registry_recipient,
+        body,
+    };
+
+    let message_bytes = Bytes(message.to_vec());
+    let metadata = Bytes(vec![0u8; 32]);
+
+    mailbox
+        .methods()
+        .process(metadata, message_bytes)
+        .with_variable_output_policy(VariableOutputPolicy::EstimateMinimum)
+        .with_contracts(&[&registry, &test_ism, &minter])
+        .call()
+        .await
+        .unwrap();
+
+    let asset_id = minter.contract_id().asset_id(&asset_sub_id);
+    let redemption_ticket_asset_id = minter.contract_id().asset_id(&redemption_ticket_id);
+
+    let wrapped_balance_before = admin_wallet.get_asset_balance(&asset_id).await.unwrap();
+    let redemption_balance_before = admin_wallet
+        .get_asset_balance(&redemption_ticket_asset_id)
+        .await
+        .unwrap();
+
+    println!("Wrapped asset balance before: {}", wrapped_balance_before);
+    println!(
+        "Redemption ticket balance before: {}",
+        redemption_balance_before
+    );
+    assert_eq!(wrapped_balance_before, mint_amount);
+    assert_eq!(redemption_balance_before, mint_amount);
+
+    let deposit_amount = 500_000u64;
+
+    let registry_user = AssetRegistry::new(registry.contract_id(), admin_wallet.clone());
+
+    let deposit_result = registry_user
+        .methods()
+        .deposit_redemption_tickets(asset_sub_id)
+        .with_contracts(&[&minter])
+        .call_params(CallParameters::new(
+            deposit_amount,
+            redemption_ticket_asset_id,
+            5_000_000,
+        ))
+        .unwrap()
+        .with_variable_output_policy(VariableOutputPolicy::EstimateMinimum)
+        .call()
+        .await;
+
+    assert!(deposit_result.is_ok(), "deposit failed");
+
+    let redemption_balance_after_deposit = admin_wallet
+        .get_asset_balance(&redemption_ticket_asset_id)
+        .await
+        .unwrap();
+
+    println!(
+        "Redemption ticket balance after: {}",
+        redemption_balance_after_deposit
+    );
+    assert_eq!(
+        redemption_balance_after_deposit,
+        mint_amount - deposit_amount
+    );
+
+    let internal_balance = registry
+        .methods()
+        .get_redemption_balance(to_fuel_identity(&admin_wallet), asset_sub_id)
+        .call()
+        .await
+        .unwrap()
+        .value;
+
+    assert_eq!(internal_balance, deposit_amount);
+
+    let withdraw_amount = 250_000u64;
+    let destination_address = Bits256([1u8; 32]);
+
+    let withdraw_result = registry_user
+        .methods()
+        .withdraw_to_external_chain(asset_sub_id, destination_domain, destination_address)
+        .with_contracts(&[&minter, &mailbox, &hook])
+        .call_params(CallParameters::new(withdraw_amount, asset_id, 10_000_000))
+        .unwrap()
+        .with_variable_output_policy(VariableOutputPolicy::EstimateMinimum)
+        .call()
+        .await;
+
+    assert!(withdraw_result.is_ok());
+
+    let wrapped_balance_after = admin_wallet.get_asset_balance(&asset_id).await.unwrap();
+
+    let internal_balance_after = registry
+        .methods()
+        .get_redemption_balance(to_fuel_identity(&admin_wallet), asset_sub_id)
+        .call()
+        .await
+        .unwrap()
+        .value;
+
+    println!("Wrapped asset balance after: {}", wrapped_balance_after);
+    println!(
+        "Internal redemption balance after: {}",
+        internal_balance_after
+    );
+
+    assert_eq!(
+        wrapped_balance_after,
+        wrapped_balance_before - withdraw_amount
+    );
+    assert_eq!(internal_balance_after, deposit_amount - withdraw_amount);
 }

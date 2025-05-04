@@ -1423,7 +1423,7 @@ async fn test_withdraw_with_real_mailbox() {
     let decimals = 18;
     let name = "Test Withdrawal Token".to_string();
     let symbol = "TWT".to_string();
-
+    
     let asset_sub_id = registry
         .methods()
         .register_asset(origin_chain_id, token_address, decimals, name, symbol)
@@ -1558,7 +1558,7 @@ async fn test_withdraw_with_real_mailbox() {
 
     let withdraw_result = registry_user
         .methods()
-        .withdraw_to_external_chain(asset_sub_id, destination_domain, destination_address)
+        .withdraw_to_external_chain(asset_sub_id, destination_domain, destination_address, None, None)
         .with_contracts(&[&minter, &mailbox, &hook])
         .call_params(CallParameters::new(withdraw_amount, asset_id, 10_000_000))
         .unwrap()

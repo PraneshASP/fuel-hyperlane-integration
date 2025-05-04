@@ -48,6 +48,7 @@ storage {
     /// Mapping of remote router decimals
     remote_router_decimals: StorageMap<b256, u8> = StorageMap {},
     mailbox_contract_id: Option<ContractId> = Option::None,
+    default_hook: ContractId = ContractId::zero(),
 }
 
 enum RegistryEvent {
@@ -204,10 +205,22 @@ abi UniversalWrappedAssetsRegistry {
     fn deposit_redemption_tickets(sub_id: b256) -> u64;
 
     #[storage(read, write), payable]
-    fn withdraw_to_external_chain(sub_id: b256, destination_domain: u32, recipient: b256) -> b256;
+    fn withdraw_to_external_chain(
+        sub_id: b256,
+        destination_domain: u32,
+        recipient: b256,
+        metadata: Option<Bytes>,
+        hook: Option<ContractId>,
+    ) -> b256;
 
     #[storage(read)]
     fn get_redemption_balance(user: Identity, asset_sub_id: b256) -> u64;
+
+    #[storage(read)]
+    fn get_hook() -> ContractId;
+
+    #[storage(write)]
+    fn set_hook(hook: ContractId);
 }
 
 abi Mailbox {
@@ -216,6 +229,8 @@ abi Mailbox {
         destination_domain: u32,
         recipient: b256,
         message_body: Bytes,
+        metadata: Bytes,
+        hook: ContractId,
     ) -> b256;
 }
 
@@ -533,7 +548,13 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[payable]
     #[storage(read, write)]
-    fn withdraw_to_external_chain(sub_id: b256, destination_domain: u32, recipient: b256) -> b256 {
+    fn withdraw_to_external_chain(
+        sub_id: b256,
+        destination_domain: u32,
+        recipient: b256,
+        metadata: Option<Bytes>,
+        hook: Option<ContractId>,
+    ) -> b256 {
         let sender = msg_sender().unwrap();
         let balance_key = (sender, sub_id);
 
@@ -592,10 +613,18 @@ impl UniversalWrappedAssetsRegistry for Contract {
             },
         };
         let mailbox = abi(Mailbox, b256::from(mailbox_id));
-        let message_id = mailbox.dispatch(destination_domain, recipient, message_body);
+        let message_id = mailbox.dispatch(
+            destination_domain,
+            recipient,
+            message_body,
+            metadata
+                .unwrap_or(Bytes::from(b256::zero())),
+            hook
+                .unwrap_or(storage.default_hook.read()),
+        );
 
         message_id
-        // ZERO_B256
+        //         ZERO_B256
     }
 
     #[storage(read)]
@@ -616,6 +645,17 @@ impl UniversalWrappedAssetsRegistry for Contract {
     #[storage(read)]
     fn get_redemption_balance(user: Identity, asset_sub_id: b256) -> u64 {
         storage.redemption_balances.get((user, asset_sub_id)).try_read().unwrap_or(0)
+    }
+
+    #[storage(read)]
+    fn get_hook() -> ContractId {
+        storage.default_hook.read()
+    }
+
+    #[storage(write)]
+    fn set_hook(hook: ContractId) {
+        require(!hook.is_zero(), "InvalidAddress");
+        storage.default_hook.write(hook);
     }
 }
 

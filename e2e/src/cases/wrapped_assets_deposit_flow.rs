@@ -23,12 +23,12 @@ use tokio::time::Instant;
 
 pub fn test() -> TestCase {
     TestCase::new(
-        "wrapped_assets_full_flow",
-        wrapped_assets_full_flow,
+        "wrapped_assets_deposit_flow",
+        wrapped_assets_deposit_flow,
     )
 }
 
-async fn wrapped_assets_full_flow() -> std::result::Result<f64, String> {
+async fn wrapped_assets_deposit_flow() -> std::result::Result<f64, String> {
     let start = Instant::now();
 
     let wallet = get_loaded_wallet().await;

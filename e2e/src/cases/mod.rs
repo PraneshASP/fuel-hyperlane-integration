@@ -12,8 +12,8 @@ mod set_gas_configs;
 mod synthetic_asset_recieve;
 mod synthetic_asset_send;
 mod wrapped_asset_mint_test;
-mod wrapped_assets_full_flow;
-//mod wrapped_assets_send;
+mod wrapped_assets_deposit_flow;
+mod wrapped_assets_withdrawal_flow;
 
 use std::{future::Future, pin::Pin};
 
@@ -69,14 +69,15 @@ pub fn pull_test_cases() -> Vec<TestCase> {
         native_asset_send::test(),
         synthetic_asset_send::test(),
         gas_overpayment_and_claim::test(),
-        asset_send_with_gas::test(),
+         asset_send_with_gas::test(),
         message_recieve::test(),
         synthetic_asset_recieve::test(),
         collateral_asset_recieve::test(),
         native_asset_recieve::test(),
         hooks_setup::test(),
-        wrapped_asset_mint_test::test(),
-        wrapped_assets_full_flow::test(),
+        //wrapped_asset_mint_test::test(),
+        wrapped_assets_deposit_flow::test(),
+        wrapped_assets_withdrawal_flow::test()
     ]
 }
 

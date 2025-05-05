@@ -224,7 +224,7 @@ abi UniversalWrappedAssetsRegistry {
 }
 
 abi Mailbox {
-    #[storage(read)]
+    #[payable, storage(read)]
     fn dispatch(
         destination_domain: u32,
         recipient: b256,
@@ -232,6 +232,15 @@ abi Mailbox {
         metadata: Bytes,
         hook: ContractId,
     ) -> b256;
+
+    #[storage(read)]
+    fn quote_dispatch(
+        destination_domain: u32,
+        recipient_address: b256,
+        message_body: Bytes,
+        metadata: Bytes,
+        hook: ContractId,
+    ) -> u64;
 }
 
 impl UniversalWrappedAssetsRegistry for Contract {
@@ -567,6 +576,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
         let minter_id = storage.minter_contract_id.read().unwrap();
         let asset_id = AssetId::new(minter_id, sub_id);
+
         require(msg_asset_id() == asset_id, "Wrong asset sent");
 
         // TODO: Fix auth  
@@ -613,18 +623,31 @@ impl UniversalWrappedAssetsRegistry for Contract {
             },
         };
         let mailbox = abi(Mailbox, b256::from(mailbox_id));
-        let message_id = mailbox.dispatch(
+        let quote = mailbox.quote_dispatch(
             destination_domain,
             recipient,
             message_body,
             metadata
-                .unwrap_or(Bytes::from(b256::zero())),
+                .unwrap_or(Bytes::new()),
+            hook
+                .unwrap_or(storage.default_hook.read()),
+        );
+
+
+        let message_id = mailbox.dispatch{
+                coins: quote,
+                asset_id: b256::from(AssetId::base()),
+            }(
+            destination_domain,
+            recipient,
+            message_body,
+            metadata
+                .unwrap_or(Bytes::new()),
             hook
                 .unwrap_or(storage.default_hook.read()),
         );
 
         message_id
-        //         ZERO_B256
     }
 
     #[storage(read)]

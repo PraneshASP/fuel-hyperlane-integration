@@ -151,20 +151,23 @@ async fn test_initialize() {
 
 #[tokio::test]
 async fn test_update_owner() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
 
     let new_owner = to_fuel_identity(&wallets[2]);
-    let result = instance.methods().update_owner(new_owner).call().await;
-
+    let result = instance
+        .methods()
+        .transfer_ownership(new_owner)
+        .call()
+        .await;
     assert!(result.is_ok());
 
     // Create a new instance with a different wallet (non-owner)
@@ -174,7 +177,7 @@ async fn test_update_owner() {
     let newer_owner = to_fuel_identity(&wallets[4]);
     let result = non_owner_instance
         .methods()
-        .update_owner(newer_owner)
+        .transfer_ownership(newer_owner)
         .call()
         .await;
 
@@ -183,13 +186,13 @@ async fn test_update_owner() {
 
 #[tokio::test]
 async fn test_update_minter_contract() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -206,13 +209,13 @@ async fn test_update_minter_contract() {
 
 #[tokio::test]
 async fn test_register_bridge() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -235,13 +238,13 @@ async fn test_register_bridge() {
 
 #[tokio::test]
 async fn test_register_asset() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -266,13 +269,13 @@ async fn test_register_asset() {
 
 #[tokio::test]
 async fn test_is_asset_registered() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -314,13 +317,13 @@ async fn test_is_asset_registered() {
 
 #[tokio::test]
 async fn test_get_asset_params() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -382,13 +385,13 @@ async fn test_get_asset_params() {
 
 #[tokio::test]
 async fn test_bridge_authorization_for_asset() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -474,13 +477,13 @@ async fn test_bridge_authorization_for_asset() {
 
 #[tokio::test]
 async fn test_register_duplicate_asset() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -518,13 +521,13 @@ async fn test_register_duplicate_asset() {
 
 #[tokio::test]
 async fn test_sub_id_consistency() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -586,13 +589,13 @@ async fn test_sub_id_consistency() {
 
 #[tokio::test]
 async fn test_bridge_is_registered() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -671,13 +674,13 @@ async fn test_bridge_is_registered() {
 
 #[tokio::test]
 async fn test_redemption_ticket_registration() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -732,13 +735,13 @@ async fn test_redemption_ticket_registration() {
 
 #[tokio::test]
 async fn test_redemption_ticket_metadata() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -785,13 +788,13 @@ async fn test_redemption_ticket_metadata() {
 
 #[tokio::test]
 async fn test_router_functions() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -854,13 +857,13 @@ async fn test_router_functions() {
 
 #[tokio::test]
 async fn test_router_decimals() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -891,13 +894,13 @@ async fn test_router_decimals() {
 
 #[tokio::test]
 async fn test_batch_enroll_routers() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -939,13 +942,13 @@ async fn test_batch_enroll_routers() {
 
 #[tokio::test]
 async fn test_get_all_domains_and_routers() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -994,13 +997,13 @@ async fn test_get_all_domains_and_routers() {
 
 #[tokio::test]
 async fn test_router_length_mismatch() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -1030,13 +1033,13 @@ async fn test_router_length_mismatch() {
 
 #[tokio::test]
 async fn test_unauthorized_router_operations() {
-    let (instance, _, _, _, _, _) = get_contract_instances().await;
+    let (instance, _, _, _, _, wallet) = get_contract_instances().await;
     let wallets = get_wallets();
 
     let minter_contract = ContractId::from([1u8; 32]);
     instance
         .methods()
-        .initialize(to_fuel_identity(&wallets[0]), minter_contract)
+        .initialize(to_fuel_identity(&wallet), minter_contract)
         .call()
         .await
         .unwrap();
@@ -1099,13 +1102,19 @@ async fn test_mint_with_real_mailbox() {
     println!("REGISTRY ID: {:?}", registry_id);
     println!("MINTER ID: {:?}", minter_id);
 
-    registry
+    let _ = registry
+        .methods()
+        .initialize(to_fuel_identity(&admin_wallet), minter_id.clone())
+        .call()
+        .await;
+
+    let _ = registry
         .methods()
         .update_minter_contract(minter_id.clone())
         .call()
         .await;
 
-    minter
+    let _ = minter
         .methods()
         .initialize(
             to_fuel_identity(&admin_wallet),
@@ -1339,6 +1348,12 @@ async fn test_withdraw_with_real_mailbox() {
 
     let minter = WrappedAssetMinter::new(&minter_id, admin_wallet.clone());
 
+    let _ = registry
+    .methods()
+    .initialize(to_fuel_identity(&admin_wallet), minter_id.clone())
+    .call()
+    .await;
+
     registry
         .methods()
         .update_minter_contract(minter_id.clone())
@@ -1423,7 +1438,7 @@ async fn test_withdraw_with_real_mailbox() {
     let decimals = 18;
     let name = "Test Withdrawal Token".to_string();
     let symbol = "TWT".to_string();
-    
+
     let asset_sub_id = registry
         .methods()
         .register_asset(origin_chain_id, token_address, decimals, name, symbol)
@@ -1558,7 +1573,13 @@ async fn test_withdraw_with_real_mailbox() {
 
     let withdraw_result = registry_user
         .methods()
-        .withdraw_to_external_chain(asset_sub_id, destination_domain, destination_address, None, None)
+        .withdraw_to_external_chain(
+            asset_sub_id,
+            destination_domain,
+            destination_address,
+            None,
+            None,
+        )
         .with_contracts(&[&minter, &mailbox, &hook])
         .call_params(CallParameters::new(withdraw_amount, asset_id, 10_000_000))
         .unwrap()

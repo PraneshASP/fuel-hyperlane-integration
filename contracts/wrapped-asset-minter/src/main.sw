@@ -40,12 +40,7 @@ use std::{
 };
 
 use standards::{src20::SRC20, src5::State};
-use utils::{
-    IssuanceParams,
-    redemption_ticket_sub_id,
-    TokenDetails,
-    WrappedAssetsError,
-};
+use utils::{IssuanceParams, redemption_ticket_sub_id, TokenDetails, WrappedAssetsError,};
 
 enum WrappedAssetMinterError {
     NotAuthorizedMinter: (),
@@ -109,23 +104,6 @@ abi AssetRegistry {
 }
 
 abi WrappedAssetMinter {
-
-    // SRC-20 Implementation
-    // #[storage(read)]
-    // fn total_assets() -> u64;
-
-    // #[storage(read)]
-    // fn total_supply(asset: AssetId) -> Option<u64>;
-
-    // #[storage(read)]
-    // fn name(asset: AssetId) -> Option<String>;
-
-    // #[storage(read)]
-    // fn symbol(asset: AssetId) -> Option<String>;
-
-    // #[storage(read)]
-    // fn decimals(asset: AssetId) -> Option<u8>;
-
     // Initialization
     #[storage(read, write)]
     fn initialize(owner: Identity, registry: b256);
@@ -259,7 +237,7 @@ impl WrappedAssetMinter for Contract {
         storage.registry.write(Some(registry));
     }
 
-     #[storage(read)]
+    #[storage(read)]
     fn registry() -> b256 {
         let registry_id = match storage.registry.read() {
             Some(id) => id,
@@ -279,7 +257,7 @@ impl WrappedAssetMinter for Contract {
     ) {
         reentrancy_guard();
 
-        // TODO: add a check to validate if msg_sender == registry
+        
         require(amount > 0, WrappedAssetMinterError::InvalidAmount);
 
         // Check if bridge is authorized via registry
@@ -290,6 +268,12 @@ impl WrappedAssetMinter for Contract {
                 b256::from(0x0000000000000000000000000000000000000000000000000000000000000000)
             },
         };
+
+        require(
+            msg_sender()
+                .unwrap() == Identity::ContractId(ContractId::from(registry_id)),
+            "Caller not registry",
+        );
 
         let registry = abi(AssetRegistry, registry_id);
         require(
@@ -313,7 +297,6 @@ impl WrappedAssetMinter for Contract {
             },
         };
 
-        // Store asset to sub_id mapping if not exists
         let asset_id = AssetId::new(ContractId::this(), sub_id);
         if storage.asset_to_sub_id.get(asset_id).try_read().is_none()
         {
@@ -335,11 +318,15 @@ impl WrappedAssetMinter for Contract {
 
     #[storage(read, write)]
     fn mint_redemption_tickets(recipient: Identity, sub_id: SubId, amount: u64) {
+        reentrancy_guard();
+
         let registry = storage.registry.read().unwrap();
-        // require(
-        //     msg_sender().unwrap() == Identity::ContractId(ContractId::from(registry)),
-        //     "Caller not registry"
-        // );
+
+        require(
+            msg_sender()
+                .unwrap() == Identity::ContractId(ContractId::from(registry)),
+            "Caller not registry",
+        );
 
         let redemption_ticket_id = redemption_ticket_sub_id(sub_id);
 
@@ -373,6 +360,14 @@ impl WrappedAssetMinter for Contract {
     #[storage(read, write)]
     fn burn(sub_id: SubId, amount: u64) {
         reentrancy_guard();
+        
+        let registry = storage.registry.read().unwrap();
+
+        require(
+            msg_sender()
+                .unwrap() == Identity::ContractId(ContractId::from(registry)),
+            "Caller not registry",
+        );
 
         require(
             msg_amount() >= amount,
@@ -391,15 +386,8 @@ impl WrappedAssetMinter for Contract {
             current_supply >= amount,
             WrappedAssetMinterError::InvalidAmount,
         );
-        // Burn the tokens
-        _burn(storage.total_supply, sub_id, amount);
 
-        // log(BurnEvent {
-        //     sender: msg_sender().unwrap(),
-        //     asset_id,
-        //     sub_id,
-        //     amount,
-        // });
+        _burn(storage.total_supply, sub_id, amount);
     }
 
     #[storage(read)]

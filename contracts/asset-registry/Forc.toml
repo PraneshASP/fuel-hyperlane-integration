@@ -6,3 +6,6 @@ name = "asset-registry"
 
 [dependencies]
 utils = { path = "../libs/utils" }
+sway_libs = { git = "https://github.com/fuellabs/sway-libs", tag = "v0.24.2" }
+interfaces = { path = "../interfaces" }
+standards = { git = "https://github.com/FuelLabs/sway-standards", tag = "v0.6.3" }

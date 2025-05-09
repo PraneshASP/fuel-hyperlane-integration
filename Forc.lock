@@ -33,7 +33,10 @@ dependencies = [
 name = "asset-registry"
 source = "member"
 dependencies = [
+    "interfaces",
+    "standards git+https://github.com/FuelLabs/sway-standards?tag=v0.6.3#6ffb53d649b9799acda6d03c3ed82706daaafe7d",
     "std",
+    "sway_libs",
     "utils",
 ]
 

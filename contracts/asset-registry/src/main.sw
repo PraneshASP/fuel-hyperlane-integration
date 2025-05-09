@@ -16,8 +16,16 @@ use std::{
     storage::storage_map::*,
     storage::storage_string::*,
     storage::storage_vec::*,
-    string::String,
+    string::String
 };
+
+use sway_libs::{
+    reentrancy::reentrancy_guard,
+    ownership::*
+};
+
+use standards::src5::State;
+
 
 use utils::{
     compute_sub_id,
@@ -28,8 +36,14 @@ use utils::{
     WrappedAssetsError,
 };
 
+use interfaces::{
+    ownable::*,
+    token_router::*,
+};
+
+
 storage {
-    owner: Option<Identity> = Option::None,
+   // owner: Option<Identity> = Option::None,
     authorized_bridges_per_asset: StorageMap<b256, StorageMap<b256, bool>> = StorageMap {},
     minter_contract_id: Option<ContractId> = Option::None,
     asset_parameters: StorageMap<b256, IssuanceParams> = StorageMap {},
@@ -66,39 +80,10 @@ enum TokenRouterError {
     RouterLengthMismatch: (),
 }
 
-abi TokenRouter {
-    #[storage(read)]
-    fn router(domain: u32) -> b256;
-
-    #[storage(read)]
-    fn all_routers() -> Vec<b256>;
-
-    #[storage(read)]
-    fn all_domains() -> Vec<u32>;
-
-    /// Removes a router for a specific domain
-    #[storage(read, write)]
-    fn unenroll_remote_router(domain: u32) -> bool;
-
-    #[storage(read, write)]
-    fn enroll_remote_router(domain: u32, router: b256);
-
-    #[storage(read, write)]
-    fn enroll_remote_routers(domains: Vec<u32>, routers: Vec<b256>);
-
-    #[storage(read)]
-    fn remote_router_decimals(router: b256) -> u8;
-
-    #[storage(read, write)]
-    fn set_remote_router_decimals(router: b256, decimals: u8);
-}
 
 abi MessageRecipient {
     #[storage(read)]
     fn handle(origin: u32, sender: b256, message_body: Bytes);
-
-    #[storage(read)]
-    fn extract_asset_data_from_body(message_body: Bytes);
 
     #[storage(read)]
     fn interchain_security_module() -> ContractId;
@@ -125,9 +110,6 @@ abi WrappedAssetMinter {
 abi UniversalWrappedAssetsRegistry {
     #[storage(read, write)]
     fn initialize(owner: Identity, minter_contract: ContractId);
-
-    #[storage(read, write)]
-    fn update_owner(new_owner: Identity);
 
     #[storage(read, write)]
     fn update_minter_contract(new_minter_contract: ContractId);
@@ -174,16 +156,13 @@ abi UniversalWrappedAssetsRegistry {
     fn get_sub_id(origin: u32, token_address: b256) -> b256;
 
     #[storage(read)]
-    fn get_bridge_id_storage() -> b256;
-
-    #[storage(read)]
     fn get_minter() -> ContractId;
 
     #[storage(read)]
     fn get_mailbox() -> ContractId;
 
     #[storage(read)]
-    fn minter_mint(
+    fn owner_mint(
         origin: u32,
         sender: b256,
         recipient: b256,
@@ -246,30 +225,22 @@ abi Mailbox {
 impl UniversalWrappedAssetsRegistry for Contract {
     #[storage(read, write)]
     fn initialize(owner: Identity, minter_contract: ContractId) {
-        let current_owner = storage.owner.read();
-        require(current_owner.is_none(), "Contract already initialized");
+        let minter = storage.minter_contract_id.read();
+        require(minter.is_none(), "Contract already initialized");
 
-        storage.owner.write(Option::Some(owner));
         storage
             .minter_contract_id
             .write(Option::Some(minter_contract));
 
+        initialize_ownership(owner);
+       
         log(RegistryEvent::OwnerUpdated(owner));
         log(RegistryEvent::MinterContractUpdated(minter_contract));
     }
 
     #[storage(read, write)]
-    fn update_owner(new_owner: Identity) {
-        let _ = require_authorized(storage.owner.read());
-
-        storage.owner.write(Option::Some(new_owner));
-
-        log(RegistryEvent::OwnerUpdated(new_owner));
-    }
-
-    #[storage(read, write)]
     fn update_minter_contract(new_minter_contract: ContractId) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         storage
             .minter_contract_id
@@ -280,7 +251,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[storage(read, write)]
     fn update_mailbox(new_mailbox: ContractId) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         storage.mailbox_contract_id.write(Option::Some(new_mailbox));
 
@@ -289,7 +260,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[storage(read, write)]
     fn register_bridge(bridge_name: String, bridge_address: Identity) -> b256 {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         let bridge_id = sha256(bridge_name);
         storage.registered_bridges.insert(bridge_id, true);
@@ -309,7 +280,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
         name: String,
         symbol: String,
     ) -> b256 {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         let minter_contract = storage.minter_contract_id.read();
         require(minter_contract.is_some(), "Minter contract not set");
@@ -428,7 +399,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[storage(read, write)]
     fn authorize_bridge_for_asset(bridge_id: b256, sub_id: b256) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         require(
             storage
@@ -465,7 +436,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[storage(read, write)]
     fn deauthorize_bridge_for_asset(bridge_id: b256, sub_id: b256) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
         log(storage.authorized_bridges_per_asset.get(sub_id).try_read().is_none());
         storage
             .authorized_bridges_per_asset
@@ -477,11 +448,6 @@ impl UniversalWrappedAssetsRegistry for Contract {
     #[storage(read)]
     fn get_sub_id(origin: u32, token_address: b256) -> b256 {
         return compute_sub_id(origin.into(), token_address);
-    }
-
-    #[storage(read)]
-    fn get_bridge_id_storage() -> b256 {
-        storage.bridge_ids.get(msg_sender().unwrap()).read()
     }
 
     #[storage(read)]
@@ -509,14 +475,15 @@ impl UniversalWrappedAssetsRegistry for Contract {
     }
 
     #[storage(read)]
-    fn minter_mint(
+    fn owner_mint(
         origin: u32,
         sender: b256,
         recipient: b256,
         amount: u64,
         minter_id: ContractId,
         bridge_id: b256,
-    ) {
+    ) { 
+        only_owner();
         let recipient_identity = Identity::Address(Address::from(recipient));
 
         let token_address = sender;
@@ -531,6 +498,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
 
     #[storage(read, write), payable]
     fn deposit_redemption_tickets(sub_id: b256) -> u64 {
+        reentrancy_guard();
         let redemption_ticket_id = match storage.subid_to_redemption_ticket.get(sub_id).try_read() {
             Some(id) => id,
             None => {
@@ -564,6 +532,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
         metadata: Option<Bytes>,
         hook: Option<ContractId>,
     ) -> b256 {
+        reentrancy_guard();
         let sender = msg_sender().unwrap();
         let balance_key = (sender, sub_id);
 
@@ -578,15 +547,7 @@ impl UniversalWrappedAssetsRegistry for Contract {
         let asset_id = AssetId::new(minter_id, sub_id);
 
         require(msg_asset_id() == asset_id, "Wrong asset sent");
-
-        // TODO: Fix auth  
-        // let bridge_id = storage.bridge_ids.get(sender).read();
-        // require(storage
-        //         .registered_bridges
-        //         .get(bridge_id)
-        //         .try_read()
-        //         .unwrap_or(false), "Only bridges can withdraw");
-
+        
         storage
             .redemption_balances
             .insert(balance_key, redemption_balance - amount);
@@ -612,7 +573,6 @@ impl UniversalWrappedAssetsRegistry for Contract {
                 asset_id: redemption_asset_id.into(),
             }(redemption_ticket_id, amount);
 
-        // TODO: Build message body for the bridge
         let message_body = _build_message_body(recipient, amount);
 
         let mailbox_id = match storage.mailbox_contract_id.read() {
@@ -724,9 +684,9 @@ impl TokenRouter for Contract {
         result
     }
 
-    #[storage(read, write)]
+    #[storage(write)]
     fn unenroll_remote_router(domain: u32) -> bool {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         let removed = storage.routers.remove(domain);
 
@@ -751,13 +711,13 @@ impl TokenRouter for Contract {
 
     #[storage(read, write)]
     fn enroll_remote_router(domain: u32, router: b256) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
         _insert_route_to_state(domain, router);
     }
 
     #[storage(read, write)]
     fn enroll_remote_routers(domains: Vec<u32>, routers: Vec<b256>) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
 
         require(
             domains
@@ -782,9 +742,9 @@ impl TokenRouter for Contract {
         _get_remote_router_decimals(router)
     }
 
-    #[storage(read, write)]
+    #[storage(write)]
     fn set_remote_router_decimals(router: b256, decimals: u8) {
-        let _ = require_authorized(storage.owner.read());
+        only_owner();
         storage.remote_router_decimals.insert(router, decimals);
     }
 }
@@ -792,6 +752,7 @@ impl TokenRouter for Contract {
 impl MessageRecipient for Contract {
     #[storage(read)]
     fn handle(origin: u32, sender: b256, message_body: Bytes) {
+        reentrancy_guard();
         let bridge_id = storage.bridge_ids.get(msg_sender().unwrap()).read();
         require(
             storage
@@ -809,7 +770,6 @@ impl MessageRecipient for Contract {
 
         let sub_id = compute_sub_id(origin.into(), token_address);
 
-        // Check if asset is registered
         require(
             storage
                 .asset_parameters
@@ -835,16 +795,34 @@ impl MessageRecipient for Contract {
     }
 
     #[storage(read)]
-    fn extract_asset_data_from_body(message_body: Bytes) {
-        let (recipient, amount) = _extract_asset_data_from_body(message_body);
-
-        log(recipient);
-        log(amount);
-    }
-
-    #[storage(read)]
     fn interchain_security_module() -> ContractId {
         ContractId::from(b256::zero())
+    }
+}
+
+// --- Ownership ---
+
+impl Ownable for Contract {
+    #[storage(read)]
+    fn owner() -> State {
+        _owner()
+    }
+    #[storage(read)]
+    fn only_owner() {
+        only_owner();
+    }
+    #[storage(write)]
+    fn transfer_ownership(new_owner: Identity) {
+        transfer_ownership(new_owner);
+    }
+    #[storage(read, write)]
+    fn initialize_ownership(new_owner: Identity) {
+        // _is_expected_owner(new_owner);
+        // initialize_ownership(new_owner);
+    }
+    #[storage(read, write)]
+    fn renounce_ownership() {
+        renounce_ownership();
     }
 }
 
@@ -868,7 +846,6 @@ fn _build_message_body(recipient: b256, amount: u64) -> Bytes {
     bytes
 }
 
-// Add these helper functions
 #[storage(read)]
 fn _get_router(domain: u32) -> b256 {
     storage.routers.get(domain).try_read().unwrap_or(b256::zero())
@@ -878,7 +855,6 @@ fn _get_router(domain: u32) -> b256 {
 fn _insert_route_to_state(domain: u32, router: b256) {
     storage.routers.insert(domain, router);
 
-    // Only add domain to the list if it's not already there
     let count = storage.domains.len();
     let mut i = 0;
     let mut exists = false;
